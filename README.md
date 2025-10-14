@@ -50,11 +50,12 @@ E é isso! Rode seu servidor de desenvolvimento (`python manage.py runserver`) e
 A saída é projetada para ser informativa e visualmente intuitiva:
 
 ```
-[DevInsights] Path: /jobs/988 | Tempo Total: 9229.56ms | DB Queries: 42 | DB Tempo: 7798.0ms | !! DUPLICATAS: 20 !!
+[DevInsights] Path: /usuarios/45 | Tempo Total: 4821.37ms | DB Queries: 36 | DB Tempo: 4120.5ms | !! DUPLICATAS: 12 !!
     [Duplicated SQLs]:
-      -> SET search_path = 'farialimajobs','public'
+      -> SELECT "usuarios_perfis"."id" FROM "usuarios_perfis" WHERE "usuarios_perfis"."usuario_id" = 45;
     [Slow Queries (> 500ms)]:
-      -> [781.0ms] SELECT "applications" ... WHERE "applications"."job_id" = 988 ...
+      -> [732.1ms] SELECT "usuarios_perfis" ... WHERE "usuarios_perfis"."usuario_id" = 45 ...
+      -> [689.4ms] SELECT "logs_acessos" ... WHERE "logs_acessos"."usuario_id" = 45 ORDER BY "data" DESC LIMIT 10;
 ```
 
 *   **Cor da Linha:**
