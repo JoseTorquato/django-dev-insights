@@ -5,9 +5,8 @@ stack trace at the moment the SQL is executed and attach it to the last entry
 in `connection.queries` as the 'traceback' key. The patch is safe (wrapped in
 try/except) and only used when DEBUG + ENABLE_TRACEBACKS are enabled.
 """
-import traceback
+
 import functools
-import sys
 
 from django.db import connection
 
@@ -22,7 +21,7 @@ def patch_cursor_debug_wrapper():
         return False
 
     # Only patch once
-    if getattr(CursorDebugWrapper, '_dev_insights_patched', False):
+    if getattr(CursorDebugWrapper, "_dev_insights_patched", False):
         return True
 
     def _wrap_execute(orig):
@@ -39,18 +38,18 @@ def patch_cursor_debug_wrapper():
 
             # Attach traceback to last connection.queries entry if present
             try:
-                if connection and hasattr(connection, 'queries') and connection.queries:
+                if connection and hasattr(connection, "queries") and connection.queries:
                     last = connection.queries[-1]
                     # Only attach if it seems to correspond to this SQL
-                    if isinstance(last, dict) and 'sql' in last:
-                        last_sql = (last.get('sql') or '').strip()
-                        if last_sql and last_sql == (sql or '').strip():
+                    if isinstance(last, dict) and "sql" in last:
+                        last_sql = (last.get("sql") or "").strip()
+                        if last_sql and last_sql == (sql or "").strip():
                             if tb:
-                                last['traceback'] = tb
+                                last["traceback"] = tb
                         else:
                             # best-effort: still attach if traceback missing
-                            if tb and 'traceback' not in last:
-                                last['traceback'] = tb
+                            if tb and "traceback" not in last:
+                                last["traceback"] = tb
             except Exception:
                 pass
 
@@ -62,7 +61,9 @@ def patch_cursor_debug_wrapper():
         # Patch execute and executemany
         CursorDebugWrapper.execute = _wrap_execute(CursorDebugWrapper.execute)
         try:
-            CursorDebugWrapper.executemany = _wrap_execute(CursorDebugWrapper.executemany)
+            CursorDebugWrapper.executemany = _wrap_execute(
+                CursorDebugWrapper.executemany
+            )
         except Exception:
             # not all wrappers implement executemany the same way
             pass
