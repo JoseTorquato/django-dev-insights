@@ -4,7 +4,7 @@ Todas as mudanças notáveis neste projeto são documentadas neste arquivo.
 
 Formato inspirado em Keep a Changelog. Versões seguem semântica simples (major.minor.patch).
 
-## [Unreleased] - 2025-10-14
+## [0.2.1] - 2025-10-14
 
 ### Added
 - ConnectionCollector (v0.4.0 work integrated): detecta queries de setup por conexão (ex.: `SET search_path`, `SELECT VERSION`) e reporta reaberturas de conexão.
@@ -29,6 +29,8 @@ DEV_INSIGHTS_CONFIG = {
 
 - Se você usa `django-tenants` ou outra solução multi-tenant, coloque o middleware do tenant **antes** do `DevInsightsMiddleware` para evitar que `SET search_path` apareça repetidamente; veja a documentação no README.
 
+## [Unreleased]
+
 ## 0.1.1 - (previous)
 
 ### Added
@@ -39,13 +41,13 @@ DEV_INSIGHTS_CONFIG = {
 
 ## Como publicar uma nova release
 
-1. Atualize a versão em `setup.py` (ex.: `version='0.2.0'`).
+1. Atualize a versão em `setup.py` (ex.: `version='0.2.1'`).
 2. Commit e tag:
 
 ```powershell
-git add CHANGELOG.md setup.py
-git commit -m "chore(release): 0.2.0 - add connection collector and tracebacks"
-git tag -a v0.2.0 -m "v0.2.0"
+git add CHANGELOG.md setup.py dev_insights/__init__.py
+git commit -m "chore(release): 0.2.1 - add connection collector and tracebacks"
+git tag -a v0.2.1 -m "v0.2.1"
 git push origin main --tags
 ```
 
