@@ -11,6 +11,11 @@ DEFAULTS = {
         'duplicate_query_count': {'warn': 5, 'crit': 10},
     },
     'SLOW_QUERY_THRESHOLD_MS': 100,
+    # Traceback capture (v0.5.0)
+    'ENABLE_TRACEBACKS': False,
+    'TRACEBACK_DEPTH': 5,
+    # Collectors enabled by default. Use e.g. ['db', 'connection'] to enable.
+    'ENABLED_COLLECTORS': ['db', 'connection'],
 }
 
 # --- Função para obter a configuração final ---
@@ -32,3 +37,6 @@ def get_config(key):
 # --- Exporta as configurações finais que serão usadas pela lib ---
 THRESHOLDS = get_config('THRESHOLDS')
 SLOW_QUERY_THRESHOLD_MS = get_config('SLOW_QUERY_THRESHOLD_MS')
+ENABLE_TRACEBACKS = get_config('ENABLE_TRACEBACKS')
+TRACEBACK_DEPTH = get_config('TRACEBACK_DEPTH')
+ENABLED_COLLECTORS = get_config('ENABLED_COLLECTORS')
