@@ -41,7 +41,8 @@ jobs:
           # black in check mode (fails if files are not formatted)
           python -m black --check .
           # flake8 will fail the job on violations
-          python -m flake8 .
+          # Only lint project source and tests to avoid scanning virtualenvs
+          python -m flake8 dev_insights tests .github .
 
       - name: Run tests
         env:
