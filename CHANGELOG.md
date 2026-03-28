@@ -1,23 +1,65 @@
 # Changelog
 
-Todas as mudanças notáveis neste projeto são documentadas neste arquivo.
+All notable changes to this project are documented in this file.
 
-Formato inspirado em Keep a Changelog. Versões seguem semântica simples (major.minor.patch).
+Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions follow simple semantic versioning (major.minor.patch).
+
+## [0.3.0] - 2026-03-28
+
+### Added
+- **Template Collector**: measures render time of each Django template per request. Opt-in via `ENABLED_COLLECTORS: ['db', 'connection', 'template']`.
+- **HTML Panel**: browse recent request metrics at `/__devinsights__/`. Dark theme, severity colors (green/yellow/red), expandable detail rows for duplicates/slow queries/templates, path filtering. Only available when `DEBUG=True`.
+- `EXCLUDE_PATHS` config option: list of URL prefixes to skip entirely (e.g. `/static/`, `/favicon.ico`, `/health/`). Requests matching any prefix bypass all collector processing.
+- `PANEL_HISTORY_SIZE` config option: controls how many recent requests the HTML panel keeps in memory (default: 50).
+- New test files: `test_collectors.py`, `test_middleware.py`, `test_trace.py`, `test_sql_trace.py`, `test_template_collector.py`, `test_panel.py` — test count went from 5 to 43.
+- Python 3.12/3.13 and Django 5.1/5.2 classifiers.
+- `[project.urls]` section in `pyproject.toml` (Homepage, Repository, Changelog).
+
+### Changed
+- **Refactored formatters**: all text output logic (duplicate details, slow queries, connection setup, templates) moved from `middleware.py` into `formatters.py`. The middleware now only orchestrates collectors and calls `format_output()` which returns the complete output string.
+- Migrated package metadata from `setup.py` to `pyproject.toml` (`[project]` table with build-system, dependencies, classifiers).
+- README rewritten in English for PyPI.
+
+### New files
+- `dev_insights/collectors/template.py` — TemplateCollector
+- `dev_insights/template_trace.py` — monkeypatch for `Template.render`
+- `dev_insights/store.py` — in-memory ring buffer for panel history
+- `dev_insights/views.py` — HTML panel view
+- `dev_insights/urls.py` — URL configuration for the panel
+- `dev_insights/panel.html` — HTML template (dark theme dashboard)
+
+### Notes / Upgrade
+- No breaking changes. Existing `DEV_INSIGHTS_CONFIG` settings continue to work.
+- Template collector is opt-in — add `'template'` to `ENABLED_COLLECTORS` to enable.
+- To enable the HTML panel, add to your `urls.py`:
+
+```python
+path('__devinsights__/', include('dev_insights.urls')),
+```
+
+- New config keys default to safe values:
+
+```python
+DEV_INSIGHTS_CONFIG = {
+    'EXCLUDE_PATHS': [],          # no paths excluded
+    'PANEL_HISTORY_SIZE': 50,     # last 50 requests
+}
+```
 
 ## [0.2.1] - 2025-10-14
 
 ### Added
-- ConnectionCollector (v0.4.0 work integrated): detecta queries de setup por conexão (ex.: `SET search_path`, `SELECT VERSION`) e reporta reaberturas de conexão.
-- Traceback capture (v0.5.0 work integrated): captura stack traces para queries lentas, queries duplicadas e queries de setup quando habilitado via configuração (`ENABLE_TRACEBACKS`).
-- Novo helper `dev_insights/sql_trace.py` que injeta (monkeypatch) tracebacks nas entradas de `connection.queries` no momento da execução (ativo apenas quando `ENABLE_TRACEBACKS=True` e `DEBUG=True`).
-- Config option `ENABLED_COLLECTORS` para ativar/desativar coletores individualmente (`db`, `connection`).
+- ConnectionCollector: detects setup queries per connection (e.g. `SET search_path`, `SELECT VERSION`) and reports connection reopens.
+- Traceback capture: captures stack traces for slow queries, duplicate queries, and setup queries when enabled via `ENABLE_TRACEBACKS`.
+- New helper `dev_insights/sql_trace.py` that injects (monkeypatch) tracebacks into `connection.queries` entries at execution time (active only when `ENABLE_TRACEBACKS=True` and `DEBUG=True`).
+- Config option `ENABLED_COLLECTORS` to enable/disable collectors individually (`db`, `connection`).
 
 ### Changed
-- Saída formatada do middleware agora imprime tracebacks (quando disponíveis) ao lado das queries lentas/duplicadas/setup.
-- `formatters` e `middleware` atualizados para suportar os novos campos (traceback) e para imprimir um resumo por conexão.
+- Formatted middleware output now prints tracebacks (when available) alongside slow/duplicate/setup queries.
+- `formatters` and `middleware` updated to support new fields (traceback) and print per-connection summaries.
 
 ### Notes / Upgrade
-- Para ativar captura de tracebacks (apenas em desenvolvimento): em `settings.py` configure:
+- To enable traceback capture (development only), configure in `settings.py`:
 
 ```python
 DEV_INSIGHTS_CONFIG = {
@@ -27,32 +69,28 @@ DEV_INSIGHTS_CONFIG = {
 }
 ```
 
-- Se você usa `django-tenants` ou outra solução multi-tenant, coloque o middleware do tenant **antes** do `DevInsightsMiddleware` para evitar que `SET search_path` apareça repetidamente; veja a documentação no README.
+- If you use `django-tenants` or another multi-tenant solution, place the tenant middleware **before** `DevInsightsMiddleware` to avoid repeated `SET search_path`; see the README.
 
-## [Unreleased]
-
-## 0.1.1 - (previous)
+## [0.1.1] - 2025-10-01
 
 ### Added
-- Versão inicial publicada (DBCollector): coleta número de queries por requisição, tempo total gasto no banco, detecção de queries duplicadas (N+1) e listagem de SQLs duplicados.
+- Initial release (DBCollector): query count per request, total DB time, duplicate query detection (N+1), and listing of duplicated SQLs.
 
-### Notes
-- Esta versão foi o ponto de partida que motivou as melhorias posteriores (saída colorida, configuração e coletores adicionais).
+## How to publish a new release
 
-## Como publicar uma nova release
+1. Update the version in `pyproject.toml` and `dev_insights/__init__.py`.
+2. Commit and tag:
 
-1. Atualize a versão em `setup.py` (ex.: `version='0.2.1'`).
-2. Commit e tag:
-
-```powershell
-git add CHANGELOG.md setup.py dev_insights/__init__.py
-git commit -m "chore(release): 0.2.1 - add connection collector and tracebacks"
-git tag -a v0.2.1 -m "v0.2.1"
+```bash
+git add CHANGELOG.md pyproject.toml dev_insights/__init__.py
+git commit -m "chore(release): 0.3.0"
+git tag -a v0.3.0 -m "v0.3.0"
 git push origin main --tags
 ```
 
-3. Suba para o PyPI (opcional): siga seu processo normal (`python -m build` + `twine upload ...`).
+3. Build and upload to PyPI:
 
-Se quiser, eu posso:
-- Atualizar `setup.py` para `0.2.0` e criar o commit + tag localmente (eu preparo as mudanças aqui no repo). Ou só criar o changelog (já pronto).
-- Gerar um `CHANGELOG` mais formal com links para PRs/issues se você sincronizar com o repositório remoto.
+```bash
+python -m build
+twine upload dist/*
+```

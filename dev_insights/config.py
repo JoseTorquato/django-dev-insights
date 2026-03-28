@@ -29,6 +29,10 @@ DEFAULTS = {
     # to the logger if it has no handlers.
     "OUTPUT_LOGGER_NAME": None,
     "OUTPUT_LOG_FILE": None,
+    # Path filtering: requests matching any prefix are skipped entirely.
+    "EXCLUDE_PATHS": [],
+    # HTML panel: max number of recent requests to keep in memory.
+    "PANEL_HISTORY_SIZE": 50,
 }
 
 
@@ -59,3 +63,5 @@ JSON_PRETTY = get_config("JSON_PRETTY")
 JSON_INDENT = get_config("JSON_INDENT")
 OUTPUT_LOGGER_NAME = get_config("OUTPUT_LOGGER_NAME")
 OUTPUT_LOG_FILE = get_config("OUTPUT_LOG_FILE")
+EXCLUDE_PATHS = get_config("EXCLUDE_PATHS")
+PANEL_HISTORY_SIZE = get_config("PANEL_HISTORY_SIZE")

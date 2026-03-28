@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DevInsights Panel</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --cyan: #58a6ff;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    line-height: 1.5;
+  }
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--cyan);
+  }
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 20px;
+  }
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: center;
+  }
+  .controls input[type="text"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    width: 260px;
+  }
+  .controls input[type="text"]::placeholder { color: var(--text-muted); }
+  .controls button {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--cyan); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  thead th {
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  tbody tr:hover { background: rgba(88,166,255,0.04); }
+  tbody tr.has-details { cursor: pointer; }
+  td {
+    padding: 8px 12px;
+    white-space: nowrap;
+  }
+  td.path {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.82rem;
+  }
+  /* Severity colors */
+  tr.ok td:first-child { border-left: 3px solid var(--green); }
+  tr.warn td:first-child { border-left: 3px solid var(--yellow); }
+  tr.crit td:first-child { border-left: 3px solid var(--red); }
+  tr.warn td { color: var(--yellow); }
+  tr.crit td { color: var(--red); }
+  tr.ok td { color: var(--text); }
+  /* Details rows */
+  .details-row { display: none; }
+  .details-row.open { display: table-row; }
+  .details-row td {
+    padding: 8px 12px 12px 24px;
+    white-space: normal;
+    background: rgba(22,27,34,0.7);
+  }
+  .detail {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.78rem;
+    padding: 3px 0;
+    word-break: break-all;
+  }
+  .detail.dup { color: var(--yellow); }
+  .detail.dup::before { content: "DUP "; font-weight: 700; }
+  .detail.slow { color: var(--red); }
+  .detail.slow::before { content: "SLOW "; font-weight: 700; }
+  .detail.tpl { color: var(--cyan); }
+  .detail.tpl::before { content: "TPL "; font-weight: 700; }
+  .badge {
+    display: inline-block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+  }
+</style>
+</head>
+<body>
+  <h1>DevInsights Panel</h1>
+  <p class="subtitle">Recent request performance metrics <span class="badge">{{ COUNT }} requests</span></p>
+
+  <div class="controls">
+    <input type="text" id="filter" placeholder="Filter by path..." oninput="filterTable()">
+    <button onclick="location.reload()">Refresh</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Path</th>
+        <th>Total</th>
+        <th>Queries</th>
+        <th>DB Time</th>
+        <th>Duplicates</th>
+        <th>Slow</th>
+        <th>Templates</th>
+        <th>TPL Time</th>
+        <th>Setup Qs</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      {{ ROWS }}
+    </tbody>
+  </table>
+
+  <script>
+    // Toggle detail rows
+    document.querySelectorAll('tr.has-details').forEach(row => {
+      row.addEventListener('click', () => {
+        const next = row.nextElementSibling;
+        if (next && next.classList.contains('details-row')) {
+          next.classList.toggle('open');
+        }
+      });
+    });
+
+    function filterTable() {
+      const q = document.getElementById('filter').value.toLowerCase();
+      const rows = document.querySelectorAll('#tbody tr');
+      rows.forEach(row => {
+        if (row.classList.contains('details-row')) return;
+        const path = row.querySelector('.path');
+        const match = !q || (path && path.textContent.toLowerCase().includes(q));
+        row.style.display = match ? '' : 'none';
+        const next = row.nextElementSibling;
+        if (next && next.classList.contains('details-row')) {
+          next.style.display = match ? '' : 'none';
+          if (!match) next.classList.remove('open');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

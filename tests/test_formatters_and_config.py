@@ -66,9 +66,7 @@ def test_format_output_text_mode_returns_string():
     reload_package_config({"OUTPUT_FORMAT": "text"})
     from dev_insights.formatters import format_output
 
-    payload = make_payload(
-        duplicate_count=1, slow_count=1, setup_count=0
-    )
+    payload = make_payload(duplicate_count=1, slow_count=1, setup_count=0)
     s = format_output(payload)
     assert isinstance(s, str)
     assert "[DevInsights]" in s
@@ -123,9 +121,7 @@ def test_format_output_json_pretty():
     assert isinstance(s, str)
     assert "\n" in s
     # indentation may vary slightly depending on JSON dump; check for a path key
-    assert (
-        '"path":' in s
-    )
+    assert '"path":' in s
 
 
 def test_middleware_logs_json_to_file(tmp_path):

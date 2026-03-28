@@ -3,7 +3,6 @@ from django.db import connections
 from dev_insights.config import ENABLE_TRACEBACKS, TRACEBACK_DEPTH
 from dev_insights.trace import capture_traceback, format_traceback
 
-
 SETUP_PREFIXES = (
     "set ",
     "select version",

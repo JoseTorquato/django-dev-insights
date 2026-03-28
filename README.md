@@ -1,54 +1,48 @@
 # django-dev-insights
 
 [![PyPI version](https://badge.fury.io/py/django-dev-insights.svg)](https://badge.fury.io/py/django-dev-insights)
+[![CI](https://github.com/josetorquato/django-dev-insights/actions/workflows/ci.yml/badge.svg)](https://github.com/josetorquato/django-dev-insights/actions/workflows/ci.yml)
 
-Lightweight, developer-focused request insights for Django — real-time, per-request diagnostics printed to your console or emitted as structured JSON.
-
-This middleware is intended for development. It helps you quickly spot common performance issues such as excessive DB queries, duplicated queries (N+1 patterns), slow queries, and connection setup queries.
+Lightweight, real-time performance diagnostics for Django development — per-request metrics printed to your console, emitted as structured JSON, or viewed in a built-in HTML panel.
 
 ---
 
 ## Why this project
 
-In real-world Django apps a single view can inadvertently issue dozens or hundreds of SQL queries. Finding the source of those queries is often time-consuming. `django-dev-insights` gives you an immediate, per-request snapshot so you can find and fix hot spots quickly during development.
+In real-world Django apps a single view can inadvertently issue dozens or hundreds of SQL queries. Finding the source of those queries is time-consuming. `django-dev-insights` gives you an immediate, per-request snapshot so you can find and fix hot spots during development.
 
-Key outcomes reported in real cases:
+**Real results:**
 
-- Reduced a page load from 28s → 3.8s by identifying and removing >200 duplicated queries.
-- Reduced a page load from 8s → 1.8s by locating an N+1 query pattern visible only with large datasets.
+- Page load reduced from **28s → 3.8s** by identifying and removing 200+ duplicated queries.
+- Page load reduced from **8s → 1.8s** by locating an N+1 pattern visible only with large datasets.
 
 ---
 
 ## Features
 
-- Per-request metrics: total time, DB time, query count.
-- Duplicate SQL detection with example stack traces (optional).
-- Slow query detection (configurable threshold) with optional stack traces.
-- Connection collector: detects setup queries (e.g. `SET search_path`) and connection reopens.
-- Two output modes: human-friendly colored `text` and structured `json` (with truncation and pretty-print options).
-- Optional integration with the Python `logging` system to emit JSON to a logger or a file.
+- **Per-request metrics**: total time, DB time, query count.
+- **Duplicate SQL detection** with optional stack traces — finds N+1 patterns instantly.
+- **Slow query detection** (configurable threshold) with optional stack traces.
+- **Connection collector**: detects setup queries (`SET search_path`, `SELECT VERSION`) and connection reopens.
+- **Template collector**: measures render time of each Django template per request.
+- **HTML panel**: browse recent request metrics at `/__devinsights__/` — dark theme, severity colors, expandable detail rows, path filtering.
+- **Path filtering**: skip noisy requests (`/static/`, `/favicon.ico`) via `EXCLUDE_PATHS`.
+- **Two output modes**: colored `text` for interactive development and structured `json` for logs/CI.
+- **Logging integration**: emit JSON to Python's `logging` system with optional file rotation.
 
 ---
 
 ## Installation
 
-Install the package from PyPI:
-
 ```bash
 pip install django-dev-insights
-```
-
-Optional: install `colorama` for colored terminal output (recommended for Windows):
-
-```bash
-pip install colorama
 ```
 
 ---
 
 ## Quickstart
 
-Add the middleware to your `settings.py`. For best results put it high in the stack so it can measure the full request lifecycle (usually as the first middleware):
+Add the middleware to `settings.py` — place it high in the stack to measure the full request lifecycle:
 
 ```python
 # settings.py
@@ -58,39 +52,63 @@ MIDDLEWARE = [
 ]
 ```
 
-Run your development server (`python manage.py runserver`) and you will see per-request reports printed to your console (when `DEBUG = True`).
+Run `python manage.py runserver` and you will see per-request reports in your console (requires `DEBUG = True`).
+
+---
+
+## HTML Panel
+
+Browse recent request metrics in a visual dashboard:
+
+```python
+# urls.py
+from django.urls import include, path
+
+urlpatterns = [
+    path('__devinsights__/', include('dev_insights.urls')),
+    # ... your other urls
+]
+```
+
+Then visit `http://localhost:8000/__devinsights__/` in your browser.
+
+The panel shows a table of recent requests with:
+- Severity indicators (green/yellow/red) based on configurable thresholds
+- Click on any row to expand duplicate queries, slow queries, and template details
+- Filter by path to focus on specific endpoints
+- Only available when `DEBUG = True`
 
 ---
 
 ## Output modes
 
-The middleware supports two output modes controllable via the `DEV_INSIGHTS_CONFIG` settings:
+### Text output (default)
 
-- `text` (default): colored, human-readable lines plus expanded sections (duplicates, slow queries, connection setup). Useful when developing interactively.
-- `json`: single-line (or pretty) structured JSON payload per request. Useful for structured logs, CI, or tooling.
-
-### Example: text output (abridged)
+Colored, human-readable lines with expandable detail sections:
 
 ```
 [DevInsights] Path: /users/45 | Total: 4821.37ms | DB Queries: 36 | DB Time: 4120.5ms | !! DUPLICATES: 12 !!
     [Duplicated SQLs]:
-      -> (4x) SELECT ...
+      -> (4x) SELECT "users"."id", ...
          Traceback:
-         path/to/your/file.py:123 in some_view -> model.objects.filter(...)
-    [Slow Queries (> 500ms)]:
-      -> [732.1ms] SELECT ...
-         Traceback:
-         path/to/your/other.py:45 in slow_fn -> queryset
+         app/views.py:123 in user_detail -> User.objects.filter(...)
+    [Slow Queries (> 100ms)]:
+      -> [732.1ms] SELECT "reports"."id", ...
+    [Templates]: 3 rendered in 45.2ms
+      -> [30.1ms] templates/base.html
+      -> [12.0ms] templates/users/detail.html
 ```
 
-### Example: JSON output (abridged, pretty-printed)
+### JSON output
+
+Structured payload per request — useful for logs, CI, or tooling:
 
 ```json
 {
-  "path": "/admin/login/",
+  "path": "/api/users/",
   "total_time_ms": 281.93,
   "db_metrics": {
-    "query_count": 2,
+    "query_count": 12,
     "total_db_time_ms": 266.0,
     "duplicate_sqls": [],
     "slow_queries": []
@@ -98,8 +116,16 @@ The middleware supports two output modes controllable via the `DEV_INSIGHTS_CONF
   "connection_metrics": {
     "total_setup_query_count": 1,
     "setup_queries": {
-      "default": [{"sql": "SET search_path = 'schema','public'"}]
+      "default": [{"sql": "SET search_path = 'public'"}]
     }
+  },
+  "template_metrics": {
+    "template_count": 2,
+    "total_render_time_ms": 15.3,
+    "templates": [
+      {"name": "base.html", "time_ms": 10.1},
+      {"name": "home.html", "time_ms": 5.2}
+    ]
   }
 }
 ```
@@ -108,43 +134,61 @@ The middleware supports two output modes controllable via the `DEV_INSIGHTS_CONF
 
 ## Configuration
 
-All configuration is provided via the `DEV_INSIGHTS_CONFIG` dict in `settings.py`. The most relevant options are shown below with their defaults.
+All settings go in `DEV_INSIGHTS_CONFIG` in your `settings.py`. Defaults shown below:
 
 ```python
 DEV_INSIGHTS_CONFIG = {
+    # Thresholds for severity colors (text mode) and panel indicators
     'THRESHOLDS': {
         'total_time_ms': {'warn': 1000, 'crit': 3000},
         'query_count': {'warn': 20, 'crit': 50},
         'duplicate_query_count': {'warn': 5, 'crit': 10},
     },
-    'SLOW_QUERY_THRESHOLD_MS': 100,     # ms
-    'ENABLE_TRACEBACKS': False,         # capture stack traces for slow/duplicate/setup queries
+    'SLOW_QUERY_THRESHOLD_MS': 100,
+
+    # Stack traces for slow/duplicate/setup queries (adds overhead)
+    'ENABLE_TRACEBACKS': False,
     'TRACEBACK_DEPTH': 5,
-    'ENABLED_COLLECTORS': ['db', 'connection'],
-    'OUTPUT_FORMAT': 'text',            # 'text' or 'json'
-    'DISPLAY_LIMIT': 100,              # max items per list (duplicates/slow/setup)
-    'JSON_PRETTY': True,               # pretty-print JSON when OUTPUT_FORMAT == 'json'
-    'JSON_INDENT': 2,                  # number of spaces for indent
-    'OUTPUT_LOGGER_NAME': None,        # if set, JSON output is sent to this logger
-    'OUTPUT_LOG_FILE': None,           # optional file attached to the logger if it has no handlers
+
+    # Collectors to enable
+    'ENABLED_COLLECTORS': ['db', 'connection'],  # add 'template' to enable
+
+    # Output
+    'OUTPUT_FORMAT': 'text',        # 'text' or 'json'
+    'DISPLAY_LIMIT': 100,           # max items per list
+    'JSON_PRETTY': True,
+    'JSON_INDENT': 2,
+
+    # Logging integration
+    'OUTPUT_LOGGER_NAME': None,     # logger name for JSON output
+    'OUTPUT_LOG_FILE': None,        # auto-attach FileHandler if logger has no handlers
+
+    # Path filtering
+    'EXCLUDE_PATHS': [],            # e.g. ['/static/', '/favicon.ico']
+
+    # HTML panel
+    'PANEL_HISTORY_SIZE': 50,       # number of recent requests to keep in memory
 }
 ```
 
-Notes:
+---
 
-- `ENABLE_TRACEBACKS` is disabled by default — enable only in development because collecting stack frames increases overhead.
-- `DISPLAY_LIMIT` truncates large lists; when truncated, the JSON includes an `_omitted` count indicating how many items were left out.
+## Collectors
+
+| Collector | Config key | What it does |
+|-----------|-----------|--------------|
+| **DBCollector** | `'db'` | Query count, DB time, duplicate detection (N+1), slow query detection. Optional stack traces. |
+| **ConnectionCollector** | `'connection'` | Detects setup queries (`SET search_path`, `SELECT VERSION`, `SHOW`) and connection reopens. |
+| **TemplateCollector** | `'template'` | Measures render time of each Django template. Opt-in — add `'template'` to `ENABLED_COLLECTORS`. |
 
 ---
 
-## Logging integration (recommended for structured JSON)
+## Logging integration
 
-If you want structured JSON to be sent to your logging system (instead of printed to stdout), set `OUTPUT_LOGGER_NAME` to a logger name. If the logger has no handlers and `OUTPUT_LOG_FILE` is provided, the middleware will attach a simple `FileHandler` that writes raw JSON messages.
-
-Recommended: configure the logger in Django's `LOGGING` settings for full control (handlers, rotation, formatters):
+Send structured JSON to your logging system instead of stdout:
 
 ```python
-# settings.py (LOGGING)
+# settings.py
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -158,9 +202,7 @@ LOGGING = {
         },
     },
     'formatters': {
-        'json_message': {
-            'format': '%(message)s'
-        }
+        'json_message': {'format': '%(message)s'}
     },
     'loggers': {
         'dev_insights': {
@@ -177,206 +219,49 @@ DEV_INSIGHTS_CONFIG = {
 }
 ```
 
-If you rely on simple configuration (no custom Django `LOGGING`), you can provide `OUTPUT_LOG_FILE` and the middleware will attach a `FileHandler` automatically when the logger has no handlers.
-
----
-
-## Collectors
-
-- `DBCollector` — inspects `connection.queries`, computes `query_count`, `total_db_time_ms`, `slow_queries`, and `duplicate_sqls` (with counts). When `ENABLE_TRACEBACKS=True` it captures a stack trace example for duplicates and slow queries.
-- `ConnectionCollector` — inspects each DB connection to detect setup queries (e.g. `SET search_path`) and whether the DB connection object was reopened during the request.
-
-You can enable/disable collectors via `ENABLED_COLLECTORS`.
-
----
-
-## Tips & Troubleshooting
-
-- Run only with `DEBUG = True`. The middleware depends on `connection.queries` available in Django debug mode.
-- If you see many `SET search_path` queries (multi-tenant setups), try enabling `ENABLE_TRACEBACKS` temporarily to locate the code path causing them.
-- Keep `ENABLE_TRACEBACKS` disabled when you are not actively debugging to avoid CPU/memory overhead.
-
----
-
-## Development
-
-- Tests and static checks: add pytest/flake8 as you prefer. This project includes minimal unit coverage; contributions that add tests are welcome.
-- To run small integration checks locally, you can import `dev_insights.formatters.format_output` and pass a sample payload to verify JSON/text output.
-
----
-
-## Contributing
-
-Contributions are welcome. Good first issues:
-
-- Add unit tests for `format_output` (text and JSON modes).
-- Add per-type display limits (e.g. separate limits for `duplicates` and `slow_queries`).
-- Add RotatingFileHandler support configuration or make the automatic FileHandler use rotation.
-
-Please open an issue or a PR with a clear description and tests where applicable.
-
----
-
-## License
-
-This project is licensed under the MIT License. See `LICENSE` for details.
-
----
-
-If you want, I can also:
-
-- add a short `USAGE.md` with examples of `DEV_INSIGHTS_CONFIG` for common workflows; or
-- create unit tests that assert JSON pretty-print and file-logging behavior.
-
-# `django-dev-insights`
-
-[![PyPI version](https://badge.fury.io/py/django-dev-insights.svg)](https://badge.fury.io/py/django-dev-insights)
-
-**Insights de performance em tempo real, direto no seu terminal.**
-
-`django-dev-insights` é um middleware leve para Django que fornece um diagnóstico claro e imediato sobre a performance de cada requisição durante o desenvolvimento. Ele foi projetado para ser simples, não intrusivo e focado em expor os gargalos mais comuns: queries de banco de dados excessivas, duplicadas e lentas.
-
-### O Problema que Resolvemos
-
-Em um projeto Django real, uma única página pode, sem querer, gerar dezenas ou centenas de queries ao banco de dados, resultando em tempos de carregamento de vários segundos. `django-dev-insights` foi criado e validado em um cenário de produção complexo, onde ajudou a:
-
-*   **Reduzir o tempo de carregamento de uma página de 28 segundos para 3.8 segundos** ao identificar e eliminar mais de 200 queries duplicadas.
-*   **Otimizar uma página de 8 segundos para 1.8 segundos** ao diagnosticar um problema de N+1 que só era visível com um grande volume de dados.
-
-Esta ferramenta te dá os dados para transformar performance de "lenta" para "rápida".
-
-## Instalação
-
-1.  Instale o pacote via `pip`:
-    ```bash
-    pip install django-dev-insights
-    ```
-
-2.  Adicione `colorama`, que é usado para a saída colorida no console:
-    ```bash
-    pip install colorama
-    ```
-
-## Configuração Rápida
-
-Para começar a usar, adicione o middleware ao seu arquivo `settings.py`. É crucial que ele seja o **primeiro** na sua lista de `MIDDLEWARE` para garantir que ele meça o ciclo de vida completo da requisição.
-# `django-dev-insights`
-
-[![PyPI version](https://badge.fury.io/py/django-dev-insights.svg)](https://badge.fury.io/py/django-dev-insights)
-
-Insights de performance em tempo real, direto no seu terminal (focado para desenvolvimento).
-
-`django-dev-insights`  e9 um middleware leve para Django que fornece diagn f3sticos por requisi e7 e3o: tempo total, queries ao DB, queries duplicadas (N+1), queries lentas e mais. Foi projetado para ser simples, n e3o intrusivo e configur e1vel.
-
-## Principais features recentes
-
-- v0.4.0: ConnectionCollector — detecta queries de setup (ex.: `SET search_path`, `SELECT VERSION`) por conex e3o e aponta reaberturas de conex e3o.
-- v0.5.0: Tracebacks — captura stack traces para queries lentas/duplicadas/setup (opcional, ativado via configura e7 e3o).
-
-Essas features juntam informa e7 f5es que permitem localizar n e3o apenas "o que" est e1 lento, mas tamb e9m "de onde" vem a query no c f3digo.
-
-## Instala e7 e3o
-
-1. Instale via pip:
-
-```bash
-pip install django-dev-insights
-```
-
-2. (Opcional) `colorama`  e9 usado para sa edda colorida:
-
-```bash
-pip install colorama
-```
-
-## Configura e7 e3o r e1pida
-
-Adicione o middleware em `settings.py`. Para medir o ciclo completo da requisi e7 e3o, posicione-o antes de middlewares que voc ea quer observar. Se usa `django-tenants`, garanta que o Tenant middleware venha antes (veja abaixo).
-
-```python
-# settings.py
-MIDDLEWARE = [
-    'dev_insights.middleware.DevInsightsMiddleware',
-    # ... outros middlewares
-]
-```
-
-Rode o servidor de desenvolvimento (`python manage.py runserver`) e voc ea ver e1 relat f3rios por requisi e7 e3o no terminal.
-
-## Como ler a sa edda
-
-Exemplo de sa edda (resumida):
-
-```
-[DevInsights] Path: /usuarios/45 | Tempo Total: 4821.37ms | DB Queries: 36 | DB Tempo: 4120.5ms | !! DUPLICATAS: 12 !!
-    [Duplicated SQLs]:
-      -> (4x) SELECT ...
-         Traceback:
-         path/to/your/file.py:123 in some_view -> model.objects.filter(...)
-    [Slow Queries (> 500ms)]:
-      -> [732.1ms] SELECT ...
-         Traceback:
-         path/to/your/other.py:45 in slow_fn -> queryset
-    [Connection Setup Queries]:
-      -> default: 3 setup queries
-         - SET search_path = 'clientschema','public'
-           Traceback: path/to/middleware.py:30 in process_request -> set_tenant(...)
-```
-
-As linhas principais s e3o coloridas (verde/amarelo/vermelho) conforme limites configur e1veis.
-
-## Configura e7 f5es dispon edveis
-
-Adicione `DEV_INSIGHTS_CONFIG` em `settings.py` para personalizar comportamentos. Exemplo com as op e7 f5es mais relevantes:
+Or use the simpler auto-attach pattern:
 
 ```python
 DEV_INSIGHTS_CONFIG = {
-    'THRESHOLDS': {
-        'total_time_ms': {'warn': 1000, 'crit': 3000},
-        'query_count': {'warn': 20, 'crit': 50},
-        'duplicate_query_count': {'warn': 5, 'crit': 10},
-    },
-    'SLOW_QUERY_THRESHOLD_MS': 100,   # ms
-    'ENABLE_TRACEBACKS': False,       # ativar captura de stack traces (DEBUG apenas)
-    'TRACEBACK_DEPTH': 5,             # profundidade do traceback
-    'ENABLED_COLLECTORS': ['db', 'connection'],  # quais coletores rodar
+    'OUTPUT_FORMAT': 'json',
+    'OUTPUT_LOGGER_NAME': 'dev_insights',
+    'OUTPUT_LOG_FILE': '/var/log/myapp/dev_insights.json',
 }
 ```
 
-Notas importantes:
-- `ENABLE_TRACEBACKS` deve ficar `False` por padr e3o; habilite somente em desenvolvimento porque captura/format de stack aumenta o overhead.
-- `ENABLED_COLLECTORS` permite desabilitar o `ConnectionCollector` se voc ea n e3o quiser relatar queries de setup.
+---
 
-## Integra e7 e3o com `django-tenants` / multi-tenant
+## Multi-tenant / django-tenants
 
-Se seu projeto usa `django-tenants` (ou outra solu e7 e3o por schemas), voc ea provavelmente ver e1 SQLs como `SET search_path ...` no log. Boas pr e1ticas:
-
-- Coloque o tenant middleware antes de qualquer middleware que acesse o DB (sessions, auth). Exemplo:
+If you use `django-tenants`, place the tenant middleware **before** DevInsights to avoid repeated `SET search_path` queries:
 
 ```python
 MIDDLEWARE = [
     'django_tenants.middleware.main.TenantMainMiddleware',
     'dev_insights.middleware.DevInsightsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
     # ...
 ]
 ```
 
-- Se voc ea ainda ver `SET search_path` repetido, habilite `ENABLE_TRACEBACKS` temporariamente para localizar o ponto do c f3digo que est e1 chamando a troca de schema.
+Enable `ENABLE_TRACEBACKS` temporarily to locate the code path causing repeated schema switches.
 
-## Diagn f3stico R e1pido
+---
 
-- Habilite `ENABLE_TRACEBACKS` e `TRACEBACK_DEPTH` alto, reproduza a requisi e7 e3o e observe o traceback que aponta para o arquivo/linha que disparou a SQL.
-- Alternativamente, use um patch tempor e1rio que loga stack imediatamente ao detectar SQLs contendo `search_path` (recomendado para investiga e7 f5es locais curtas).
+## Tips
 
-## Boas pr e1ticas
+- Only runs when `DEBUG = True` — the middleware depends on `connection.queries`.
+- Keep `ENABLE_TRACEBACKS` disabled by default — enable only when actively debugging.
+- Use `EXCLUDE_PATHS` to filter static files and health checks from the output.
+- The HTML panel stores metrics in memory only — data is cleared on server restart.
 
-- Use `DevInsights` apenas com `DEBUG = True` (padr e3o) — a coleta de queries depende de `connection.queries` do Django.
-- Desabilite tracebacks e coletores quando n e3o estiver depurando para reduzir overhead.
+---
 
-## Contribui e7 f5es
+## Contributing
 
-Contribui e7 f5es s e3o bem-vindas. Abra issues para bugs/feature requests ou pull requests com pequenas melhorias (tests, docs, coletores adicionais).
+Contributions are welcome. Please open an issue or PR with a clear description and tests.
 
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
