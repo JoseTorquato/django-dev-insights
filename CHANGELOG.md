@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions follow simple semantic versioning (major.minor.patch).
 
+## [Unreleased]
+
+### Changed (compatibility)
+- **Minimum versions raised to Python 3.10 and Django 4.2.** Declared support now goes up to **Django 6.1**: classifiers for Django 4.2, 5.0, 5.1, 5.2, 6.0 and 6.1, and Python 3.10–3.13.
+- Python 3.8/3.9 and Django 3.2–4.1 are no longer declared. In practice Python 3.8 was already broken: since 0.3.0 the PEP 639 `license = "MIT"` field needs setuptools 77 or newer, which does not run on Python 3.8, so the package could not be built from source there.
+- CI tests every declared Django version at least once, including the extremes (Python 3.10 + Django 4.2, Python 3.13 + Django 6.1), and installs the package from source in every job.
+
 ## [0.3.0] - 2026-03-28
 
 ### Added
