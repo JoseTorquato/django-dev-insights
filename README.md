@@ -104,6 +104,8 @@ Colored, human-readable lines with expandable detail sections:
       -> [12.0ms] templates/users/detail.html
 ```
 
+In the middleware, the `Traceback:` and `at file:line` lines only appear with `ENABLE_TRACEBACKS = True` (default `False`). With the default, you still get the counts and the SQL, without the origin. `QueryRecorder` and the CI guard always capture the origin.
+
 ### JSON output
 
 Structured payload per request — useful for logs, CI, or tooling:
@@ -261,6 +263,13 @@ Enable `ENABLE_TRACEBACKS` temporarily to locate the code path causing repeated 
 - **Similar** (`similar_query_count`): queries with the same *signature* — literals and parameters replaced by `?`, `IN (...)` lists of any size collapsed — ran more than once. This is what catches the classic N+1 (`for book in books: book.author`), where each query differs only in the id. Every duplicate is also similar.
 
 The signature is built from the SQL text, not from the ORM, so it also groups `raw()` queries and SQL issued by third-party code.
+
+### Where the origin points
+
+The origin is the innermost frame of *your* code when the query ran. Frames from Django, from this library and from anything under `site-packages` / `dist-packages` are skipped. That has two consequences:
+
+- **N+1 triggered from a template** (`{{ book.author.name }}` in a loop): the query runs while Django renders, so the origin is the line in your view that calls `render(...)`, not the line in the `.html` file.
+- **Your own code installed as a regular package** (in `site-packages`) is skipped like any other dependency: the origin falls back to the first frame outside it, which is usually the view that called it. If nothing of yours is on the stack, there is no origin. Editable installs (`pip install -e`) live outside `site-packages` and are reported normally.
 
 ## Recording queries without DEBUG
 
