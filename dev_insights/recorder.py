@@ -83,8 +83,12 @@ class QueryRecorder:
             entry["origin"] = capture_origin()
         self.entries.append(entry)
 
-    def mark(self):
-        """Position to slice the entries recorded from now on."""
+    def mark(self, new_origins=False):
+        """Position to slice the entries recorded from now on. With
+        ``new_origins``, origins are captured again for every signature, so a
+        block (one request) gets its own origins."""
+        if new_origins:
+            self._seen_signatures = set()
         return len(self.entries)
 
     def metrics(self, start=0, end=None, slow_threshold_ms=None):

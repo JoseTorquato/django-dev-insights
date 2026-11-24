@@ -36,6 +36,10 @@ dependencies = [
     "colorama>=0.4.0",
 ]
 
+[project.entry-points.pytest11]
+# inert until a test uses the dev_insights marker or fixture
+dev_insights = "dev_insights.pytest_plugin"
+
 [project.urls]
 Homepage = "https://github.com/josetorquato/django-dev-insights"
 Repository = "https://github.com/josetorquato/django-dev-insights"

@@ -27,6 +27,7 @@ In real-world Django apps a single view can inadvertently issue dozens or hundre
 - **Template collector**: measures render time of each Django template per request.
 - **HTML panel**: browse recent request metrics at `/__devinsights__/` — dark theme, severity colors, expandable detail rows, path filtering.
 - **Path filtering**: skip noisy requests (`/static/`, `/favicon.ico`) via `EXCLUDE_PATHS`.
+- **CI guard (pytest)**: a per-view query baseline, versioned in your repo, that only tightens — a request that runs more queries, more N+1-like repeats or more template renders than the baseline fails the test.
 - **Two output modes**: colored `text` for interactive development and structured `json` for logs/CI.
 - **Logging integration**: emit JSON to Python's `logging` system with optional file rotation.
 
@@ -285,6 +286,93 @@ metrics["similar_sqls"][0]["origin"] # {"file": "shop/views.py", "line": 12, "fu
 ```
 
 `QueryRecorder` uses `connection.execute_wrapper`, so it works with `DEBUG = False` (Django's test runner and pytest-django force it). It records queries from the current thread, on every database alias. The origin — the innermost frame of your code, skipping Django, this library and installed packages — is captured when the query runs, once per signature.
+
+## CI guard: a per-view query baseline that only tightens
+
+The package ships a pytest plugin (auto-registered, inert until a test uses it). Mark the tests that exercise your views:
+
+```python
+import pytest
+
+@pytest.mark.dev_insights
+def test_order_list(client):          # pytest-django's client, or django.test.Client()
+    client.get("/orders/")
+```
+
+The marker also works on classes, including `django.test.TestCase` subclasses. Every request made through Django's test client during a marked test is measured **per view** (HTTP method + URL name):
+
+| metric | meaning |
+|---|---|
+| `queries` | total SQL queries of the request |
+| `similar_queries` | queries that share a normalized signature with another query of the same request — N+1 suspects |
+| `templates` | number of template renders (a count, not a time) |
+
+Record the baseline once and commit it:
+
+```bash
+pytest --dev-insights-update-baseline
+git add dev_insights_baseline.json
+```
+
+```json
+{
+  "version": 1,
+  "views": {
+    "GET orders:detail": {"queries": 4, "similar_queries": 0, "templates": 3},
+    "GET orders:list": {"queries": 3, "similar_queries": 0, "templates": 2}
+  }
+}
+```
+
+One view per line, so a change in the baseline is a one-line diff in the pull request.
+
+From then on, plain `pytest`:
+
+- **gets worse → the test fails**, with everything in one message:
+
+  ```
+  dev-insights: GET orders:list got worse than the baseline (dev_insights_baseline.json)
+    queries: 3 -> 26
+    similar queries (N+1 suspects): 0 -> 23
+    most repeated query (23x): SELECT ... FROM "customer" WHERE "customer"."id" = ? LIMIT ?
+      at orders/views.py:41 in order_list
+    If this is intended, update the baseline: pytest --dev-insights-update-baseline
+  ```
+- **gets better → passes**, and the end of the run lists the views that can be tightened;
+- **a view with no baseline → fails**, so a new endpoint cannot slip in unmeasured.
+
+The baseline holds, per view, the worst request seen in the run (a view hit by several tests is held to its heaviest one). Views not exercised in an update run are kept. Raising a number means running the update and committing the diff, which is what a reviewer sees.
+
+Options: `--dev-insights-baseline=PATH` or the ini key `dev_insights_baseline` (default `dev_insights_baseline.json` in the rootdir). Disable the plugin entirely with `-p no:dev_insights`.
+
+Template **render time** is deliberately not in the baseline: it varies between CI machines. The count is deterministic.
+
+Limits: requests are measured on the thread that runs the test (Django's sync test client). `AsyncClient` and `live_server` requests are not measured. Run `--dev-insights-update-baseline` without `pytest-xdist` (`-n`); checking works with it.
+
+### GitHub Actions
+
+```yaml
+name: tests
+on: [pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt django-dev-insights pytest pytest-django
+      # fails the job if any marked view runs more queries, more N+1 repeats
+      # or more template renders than dev_insights_baseline.json allows
+      - run: pytest
+```
+
+### How it relates to other tools
+
+- **`assertNumQueries` (Django) and `django_assert_num_queries` / `django_assert_max_num_queries` (pytest-django)** check one block against a number you write by hand in each test. The guard keeps the numbers in one generated file, per view, plus similar queries and template renders, and lets them go down without editing tests.
+- **[django-zeal](https://github.com/taobojlen/django-zeal)** detects N+1 at the ORM level (it knows it was `Book.author` in a loop) and raises immediately. Use it together with this guard: zeal catches the N+1 pattern; the guard catches a view that got heavier than it was, in any SQL — `raw()`, managers, third-party code — and shows where it ran.
+- **[django-perf-rec](https://github.com/adamchainz/django-perf-rec)** records the full list of queries per test and fails on any change. The guard records three numbers per view and fails only when one goes up.
 
 ---
 
