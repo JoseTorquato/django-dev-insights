@@ -120,18 +120,24 @@ class TestDBCollector:
         assert metrics["duplicate_query_count"] == 0
         assert metrics["slow_query_count"] == 0
 
-    def test_traceback_captured_when_enabled(self):
+    def test_uses_traceback_captured_at_execution(self):
+        """The traceback shown is the one sql_trace attached when the query
+        ran, not a stack taken at the end of the request."""
         reload_config({"ENABLE_TRACEBACKS": True, "SLOW_QUERY_THRESHOLD_MS": 1})
         importlib.reload(__import__("dev_insights.collectors.db", fromlist=["db"]))
         from dev_insights.collectors.db import DBCollector
 
-        queries = self._make_queries(
-            [
-                ("SELECT dup", 0.001),
-                ("SELECT dup", 0.001),
-                ("SELECT slow_one", 0.100),
-            ]
-        )
+        origin = {"file": "shop/views.py", "line": 12, "func": "book_list"}
+        queries = [
+            {"sql": "SELECT dup", "time": "0.001", "traceback": "views.py:12 dup"},
+            {"sql": "SELECT dup", "time": "0.001", "traceback": "views.py:99 later"},
+            {
+                "sql": "SELECT slow_one",
+                "time": "0.100",
+                "traceback": "views.py:30 slow",
+            },
+        ]
+        queries[0]["origin"] = origin
 
         with patch("dev_insights.collectors.db.connection") as mock_conn:
             mock_conn.queries = []
@@ -141,10 +147,58 @@ class TestDBCollector:
             collector.finish_collect()
 
         metrics = collector.get_metrics()
-        # Slow queries should have tracebacks
-        assert metrics["slow_queries"][0].get("traceback") is not None
-        # Duplicate entries should have tracebacks
-        assert metrics["duplicate_sqls"][0].get("traceback") is not None
+        assert metrics["slow_queries"][0]["traceback"] == "views.py:30 slow"
+        # the first occurrence's traceback, as recorded at execution time
+        assert metrics["duplicate_sqls"][0]["traceback"] == "views.py:12 dup"
+        assert metrics["duplicate_sqls"][0]["origin"] == origin
+        assert metrics["similar_sqls"][0]["origin"] == origin
+
+    def test_no_traceback_invented_at_end_of_request(self):
+        """Without a traceback recorded at execution, none is made up from the
+        middleware's own stack (the 0.3.0 behaviour pointed to the wrong
+        place)."""
+        reload_config({"ENABLE_TRACEBACKS": True, "SLOW_QUERY_THRESHOLD_MS": 1})
+        importlib.reload(__import__("dev_insights.collectors.db", fromlist=["db"]))
+        from dev_insights.collectors.db import DBCollector
+
+        queries = self._make_queries([("SELECT dup", 0.001), ("SELECT dup", 0.1)])
+        with patch("dev_insights.collectors.db.connection") as mock_conn:
+            mock_conn.queries = []
+            collector = DBCollector()
+            collector.start_collect()
+            mock_conn.queries = queries
+            collector.finish_collect()
+
+        metrics = collector.get_metrics()
+        assert "traceback" not in metrics["duplicate_sqls"][0]
+        assert "traceback" not in metrics["slow_queries"][0]
+
+    def test_similar_counts_n_plus_one_but_duplicates_stay_exact(self):
+        reload_config()
+        from dev_insights.collectors.db import DBCollector
+
+        queries = self._make_queries(
+            [
+                ('SELECT * FROM "book"', 0.001),
+                ('SELECT * FROM "author" WHERE "id" = 1', 0.001),
+                ('SELECT * FROM "author" WHERE "id" = 2', 0.001),
+                ('SELECT * FROM "author" WHERE "id" = 3', 0.001),
+            ]
+        )
+        with patch("dev_insights.collectors.db.connection") as mock_conn:
+            mock_conn.queries = []
+            collector = DBCollector()
+            collector.start_collect()
+            mock_conn.queries = queries
+            collector.finish_collect()
+
+        metrics = collector.get_metrics()
+        assert metrics["duplicate_query_count"] == 0
+        assert metrics["similar_query_count"] == 3
+        similar = metrics["similar_sqls"][0]
+        assert similar["signature"] == 'SELECT * FROM "author" WHERE "id" = ?'
+        assert similar["count"] == 3
+        assert similar["example"] == 'SELECT * FROM "author" WHERE "id" = 1'
 
 
 # ---------------------------------------------------------------------------

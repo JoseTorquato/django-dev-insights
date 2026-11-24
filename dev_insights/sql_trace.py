@@ -10,7 +10,13 @@ import functools
 
 from django.db import connection
 
-from .trace import capture_traceback, format_traceback
+from .trace import capture_origin, capture_traceback, format_traceback
+
+
+def _depth():
+    from .config import TRACEBACK_DEPTH
+
+    return TRACEBACK_DEPTH or 5
 
 
 def patch_cursor_debug_wrapper():
@@ -29,10 +35,11 @@ def patch_cursor_debug_wrapper():
         def wrapper(self, sql, params=None):
             # capture stack at moment of execution
             try:
-                frames = capture_traceback()
+                frames = capture_traceback(depth=_depth())
                 tb = format_traceback(frames)
+                origin = capture_origin()
             except Exception:
-                tb = None
+                tb = origin = None
 
             result = orig(self, sql, params)
 
@@ -46,10 +53,14 @@ def patch_cursor_debug_wrapper():
                         if last_sql and last_sql == (sql or "").strip():
                             if tb:
                                 last["traceback"] = tb
+                            if origin:
+                                last["origin"] = origin
                         else:
                             # best-effort: still attach if traceback missing
                             if tb and "traceback" not in last:
                                 last["traceback"] = tb
+                            if origin and "origin" not in last:
+                                last["origin"] = origin
             except Exception:
                 pass
 
