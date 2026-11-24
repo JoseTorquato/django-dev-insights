@@ -22,9 +22,14 @@ def reload_package_config(new_config: dict):
     # reload package modules that read settings at import time
     import dev_insights.config
     import dev_insights.formatters
+    import dev_insights.middleware
 
     importlib.reload(dev_insights.config)
     importlib.reload(dev_insights.formatters)
+    # the middleware copies OUTPUT_FORMAT / OUTPUT_LOGGER_NAME / OUTPUT_LOG_FILE
+    # at import: without this, it keeps whatever config another test module
+    # loaded last, and the result depends on test order
+    importlib.reload(dev_insights.middleware)
 
 
 def make_payload(duplicate_count=0, slow_count=0, setup_count=0):
