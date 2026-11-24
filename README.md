@@ -13,8 +13,8 @@ In real-world Django apps a single view can inadvertently issue dozens or hundre
 
 **Real results:**
 
-- Page load reduced from **28s → 3.8s** by identifying and removing 200+ duplicated queries.
-- Page load reduced from **8s → 1.8s** by locating an N+1 pattern visible only with large datasets.
+- Page load reduced from **28s → 1.8s** by identifying and removing 200+ duplicated queries.
+- Page load reduced from **8s → 0.3s** by locating an N+1 pattern visible only with large datasets.
 
 ---
 
