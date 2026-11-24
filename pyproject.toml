@@ -57,3 +57,7 @@ target-version = ['py310']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The suite configures Django itself (tests/conftest.py). pytest-django, if
+# installed, would block database access; the plugin's pytest-django
+# integration has its own test (test_with_pytest_django_client_and_testcase).
+addopts = "-p no:django"

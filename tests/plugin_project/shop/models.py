@@ -17,10 +17,16 @@ class Book(models.Model):
 
 
 def create_and_seed():
-    if Author._meta.db_table not in connection.introspection.table_names():
+    from django.contrib.contenttypes.models import ContentType
+
+    tables = connection.introspection.table_names()
+    if Author._meta.db_table not in tables:
         with connection.schema_editor() as editor:
+            editor.create_model(ContentType)
             editor.create_model(Author)
             editor.create_model(Book)
+    # the row exists, but ContentType's in-memory cache stays cold
+    ContentType.objects.get_or_create(app_label="shop", model="book")
     Book.objects.all().delete()
     Author.objects.all().delete()
     for i in range(3):

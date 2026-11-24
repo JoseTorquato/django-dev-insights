@@ -20,3 +20,16 @@ def books(request):
 
 def ping(request):
     return HttpResponse("ok")
+
+
+def kinds(request):
+    from django.contrib.contenttypes.models import ContentType
+
+    # served from ContentType's process-wide cache once warm
+    return HttpResponse(ContentType.objects.get_for_model(Book).model)
+
+
+def stats(request):
+    from .cache import author_count
+
+    return HttpResponse(str(author_count()))

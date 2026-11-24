@@ -339,15 +339,47 @@ From then on, plain `pytest`:
     If this is intended, update the baseline: pytest --dev-insights-update-baseline
   ```
 - **gets better → passes**, and the end of the run lists the views that can be tightened;
-- **a view with no baseline → fails**, so a new endpoint cannot slip in unmeasured.
+- **a view with no baseline → fails**, so a new endpoint cannot slip in unmeasured. While adopting the guard on many tests at once, `--dev-insights-new-view=warn` (or the ini key `dev_insights_new_view = warn`) lists them at the end of the run instead of failing.
 
-The baseline holds, per view, the worst request seen in the run (a view hit by several tests is held to its heaviest one). Views not exercised in an update run are kept. Raising a number means running the update and committing the diff, which is what a reviewer sees.
+The baseline holds, per view, the worst request seen in the run (a view hit by several tests is held to its heaviest one). Raising a number means running the update and committing the diff, which is what a reviewer sees.
 
-Options: `--dev-insights-baseline=PATH` or the ini key `dev_insights_baseline` (default `dev_insights_baseline.json` in the rootdir). Disable the plugin entirely with `-p no:dev_insights`.
+**Keeping the baseline honest**
+
+- **Run the update on the whole suite.** An update on a partial run (`-k`, `-m`, file or test ids, `--lf`, `-x`) adds new views and raises worse ones, but **never lowers** a view and says `PARTIAL RUN` at the end: a subset of the tests may not reach a view's heaviest request.
+- **Views that no longer exist** stay in the file until you prune them, on a full run: `pytest --dev-insights-update-baseline --dev-insights-prune`.
+- **Use the same database backend locally and in CI.** SQLite and PostgreSQL can differ in query counts for the same code (savepoints, `RETURNING`, bulk operations). Generate the baseline where CI runs, or with the same backend.
+
+**Caches and test order**
+
+A view that reads from a process-wide cache runs fewer queries once another test has warmed it, so the same test could pass in one order and fail in another. That is the worst thing a CI guard can do. Every measured request therefore starts with Django's own caches cleared: `ContentType` (used by generic relations, permissions and the admin log) and `Site`. Your project's caches need the same treatment. List a function that clears each one:
+
+```ini
+# pytest.ini / [tool.pytest.ini_options]
+[pytest]
+dev_insights_clear_caches =
+    myproject.settings_cache.clear
+    catalog.cache.reset_category_tree
+```
+
+Each function is called before every measured request. If you use Django's cache framework (`django.core.cache`) in views, clear it the same way (for example a small function that calls `cache.clear()`), or use `DummyCache` in test settings.
+
+Options:
+
+| option / ini key | what it does |
+|---|---|
+| `--dev-insights-update-baseline` | write the measured numbers instead of comparing |
+| `--dev-insights-prune` | with the update, on a full run: drop views no test hit |
+| `--dev-insights-baseline=PATH` / `dev_insights_baseline` | baseline file (default `dev_insights_baseline.json` in the rootdir) |
+| `--dev-insights-new-view=fail\|warn` / `dev_insights_new_view` | a view without a baseline fails (default) or only warns |
+| `dev_insights_clear_caches` (ini) | functions that clear your caches before each measured request |
+
+Disable the plugin entirely with `-p no:dev_insights`.
+
+Where the query came from: the `at file:line` in a failure is the innermost frame of your code. For an N+1 triggered while rendering a template, that is the `render(...)` line in the view, not the line in the `.html` file.
 
 Template **render time** is deliberately not in the baseline: it varies between CI machines. The count is deterministic.
 
-Limits: requests are measured on the thread that runs the test (Django's sync test client). `AsyncClient` and `live_server` requests are not measured. Run `--dev-insights-update-baseline` without `pytest-xdist` (`-n`); checking works with it.
+Limits: requests are measured on the thread that runs the test (Django's sync test client). `AsyncClient` and `live_server` requests are not measured. Run `--dev-insights-update-baseline` without `pytest-xdist` (`-n`). Checking works with it, and the end-of-run notes (improvements, views without a baseline) are collected from the workers and printed once.
 
 ### GitHub Actions
 
