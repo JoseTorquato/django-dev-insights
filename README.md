@@ -39,6 +39,8 @@ In real-world Django apps a single view can inadvertently issue dozens or hundre
 pip install django-dev-insights
 ```
 
+The CI guard (pytest plugin) and the similar-query count need **0.4.0 or newer**. Upgrading from 0.3? See the "Upgrading from 0.3" notes in [CHANGELOG.md](CHANGELOG.md).
+
 **Compatibility:** Python 3.10–3.13 and Django 4.2, 5.0, 5.1, 5.2, 6.0 and 6.1 — every one of these Django versions and Python versions is exercised in CI.
 
 ---
@@ -394,7 +396,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt django-dev-insights pytest pytest-django
+      - run: pip install -r requirements.txt "django-dev-insights>=0.4" pytest pytest-django
       # fails the job if any marked view runs more queries, more N+1 repeats
       # or more template renders than dev_insights_baseline.json allows
       - run: pytest
