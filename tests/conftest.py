@@ -35,3 +35,7 @@ if not settings.configured:
         DEFAULT_AUTO_FIELD="django.db.models.AutoField",
     )
     django.setup()
+
+# sample project run in a separate pytest process by test_pytest_plugin.py
+collect_ignore = ["plugin_project"]
+pytest_plugins = ["pytester"]

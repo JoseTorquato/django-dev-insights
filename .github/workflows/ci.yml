@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: test (py${{ matrix.python-version }}, Django ${{ matrix.django }})
+    name: test (py${{ matrix.python-version }}, Django ${{ matrix.django }}${{ matrix.extras && ' + pytest-django, xdist' || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -30,6 +30,12 @@ jobs:
             django: "6.0"
           - python-version: "3.13"
             django: "6.1"
+          # the guard's main use case: pytest-django (client fixture,
+          # TestCase) and pytest-xdist; runs the integration tests that are
+          # skipped elsewhere
+          - python-version: "3.13"
+            django: "5.2"
+            extras: "pytest-django pytest-xdist"
 
     steps:
       - name: Checkout
@@ -55,6 +61,7 @@ jobs:
           python -m pip install pytest pytest-cov
           # also proves the package builds from source on this Python
           python -m pip install -e .
+          if [ -n "${{ matrix.extras }}" ]; then python -m pip install ${{ matrix.extras }}; fi
           python -c "import django, sys; print('Python', sys.version.split()[0], 'Django', django.get_version())"
 
       - name: Run linters (black, flake8)
