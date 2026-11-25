@@ -4,7 +4,18 @@ All notable changes to this project are documented in this file.
 
 Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions follow simple semantic versioning (major.minor.patch).
 
-## [Unreleased]
+## [0.4.0] - 2026-11-25
+
+### Upgrading from 0.3
+
+- **Requirements:** Python 3.10+ and Django 4.2+.
+  - On **Python < 3.10**, pip stays on 0.3.0 by itself.
+  - On **Django < 4.2**, it does not: if Django is not pinned, `pip install -U django-dev-insights` installs 0.4.0 **and upgrades Django** to satisfy it. Before upgrading, pin Django in your requirements (e.g. `Django==3.2.*`), or pin `django-dev-insights<0.4`.
+- **`duplicate_query_count` / `duplicate_sqls` did not change meaning:** same SQL, same parameters. Your existing thresholds keep working.
+- **`similar_query_count` / `similar_sqls` are new:** queries that differ only in their parameters, i.e. the classic N+1, which 0.3 reported as zero duplicates. Expect this number to be non-zero on views that were "clean" before. Nothing fails because of it in development; it is only shown in the log, JSON and panel.
+- **Origins in the middleware need `ENABLE_TRACEBACKS = True`** (default `False`), as before. What changed is that the traceback now points to the line that ran the query, not to the middleware. `QueryRecorder` and the CI guard always capture the origin.
+- **Adopting the CI guard** (optional, pytest only). Mark the tests that hit your views with `@pytest.mark.dev_insights`. Then run `pytest --dev-insights-update-baseline` once, on the whole suite and with the same database backend as CI, and commit `dev_insights_baseline.json`. From then on, plain `pytest` fails when a view gets heavier. If your views read project-level caches, list functions that clear them in the ini key `dev_insights_clear_caches`. See "CI guard" in the README.
+- The pytest plugin is installed with the package but does nothing in projects that do not use the marker.
 
 ### Changed (compatibility)
 - **Minimum versions raised to Python 3.10 and Django 4.2.** Declared support now goes up to **Django 6.1**: classifiers for Django 4.2, 5.0, 5.1, 5.2, 6.0 and 6.1, and Python 3.10–3.13.
@@ -16,6 +27,12 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions fol
 - `dev_insights.signature.sql_signature()`.
 - `dev_insights.recorder.QueryRecorder`: records queries through `connection.execute_wrapper`, so it works with `DEBUG = False` (test runners). Captures the origin (file, line, function) of the first query of each signature when it runs.
 - **CI guard (pytest plugin)**, registered through the `pytest11` entry point and inert until used. `@pytest.mark.dev_insights` (or the `dev_insights` fixture) measures each request of Django's test client per view (method + URL name): queries, similar queries and template renders. These are compared with a versioned baseline file (`dev_insights_baseline.json`). Worse fails the test with the view, before -> now, the most repeated query and where it ran. Better passes and is reported. A view without a baseline fails. `--dev-insights-update-baseline` writes the file, one view per line. `--dev-insights-baseline` / ini `dev_insights_baseline` set the path. Each measured request starts with the ContentType and Site caches cleared, plus any function listed in the ini key `dev_insights_clear_caches`, so the numbers do not depend on test order. `--dev-insights-new-view=warn` reports views without a baseline instead of failing. An update on a partial run never lowers a view. `--dev-insights-prune` removes views no test hit, on full runs only. With pytest-xdist, the end-of-run notes come from all workers.
+
+- Release workflow (`.github/workflows/publicar.yml`): publishing a GitHub release runs the full suite, checks that the tag matches the package version and the CHANGELOG, builds, checks the wheel in a clean environment (pytest plugin entry point included), and publishes to PyPI through Trusted Publishing, with no token stored.
+- `[test]` extra: `pip install "django-dev-insights[test]"` brings pytest, pytest-cov, pytest-django and pytest-xdist.
+
+### Changed
+- `dev_insights.__version__` now comes from the installed package metadata instead of a hard-coded string.
 
 ### Fixed
 - Tracebacks of duplicate, slow and connection-setup queries were captured at the end of the request, so they showed the middleware's stack. They now come from the moment the query ran (`ENABLE_TRACEBACKS`), and frames from Django, this library and installed packages are skipped.
