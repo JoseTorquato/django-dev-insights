@@ -38,6 +38,8 @@ In real-world Django apps a single view can inadvertently issue dozens or hundre
 pip install django-dev-insights
 ```
 
+**Compatibility:** Python 3.10–3.13 and Django 4.2, 5.0, 5.1, 5.2, 6.0 and 6.1 — every one of these Django versions and Python versions is exercised in CI.
+
 ---
 
 ## Quickstart

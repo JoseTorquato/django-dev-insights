@@ -8,17 +8,35 @@ on:
 
 jobs:
   test:
+    name: test (py${{ matrix.python-version }}, Django ${{ matrix.django }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        # Every Django version declared in pyproject.toml is tested at least
+        # once, and so is every Python version. Extremes: Python 3.10 + Django
+        # 4.2 (oldest) and Python 3.13 + Django 6.1 (newest).
+        include:
+          - python-version: "3.10"
+            django: "4.2"
+          - python-version: "3.11"
+            django: "5.0"
+          - python-version: "3.12"
+            django: "5.1"
+          - python-version: "3.12"
+            django: "5.2"
+            lint: true
+          - python-version: "3.12"
+            django: "6.0"
+          - python-version: "3.13"
+            django: "6.1"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -26,18 +44,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-pip-${{ hashFiles('**/requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-pip-
+            ${{ runner.os }}-py${{ matrix.python-version }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install Django colorama
-          python -m pip install pytest pytest-cov black flake8
+          python -m pip install "Django~=${{ matrix.django }}.0" colorama
+          python -m pip install pytest pytest-cov
+          # also proves the package builds from source on this Python
+          python -m pip install -e .
+          python -c "import django, sys; print('Python', sys.version.split()[0], 'Django', django.get_version())"
 
       - name: Run linters (black, flake8)
+        if: matrix.lint
         run: |
+          python -m pip install black flake8
           python -m black --check .
           python -m flake8 dev_insights tests .github
 

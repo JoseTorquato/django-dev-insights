@@ -4,6 +4,8 @@ This file contains ready-to-copy `DEV_INSIGHTS_CONFIG` snippets for common devel
 
 Paste the selected example into your `settings.py` (or merge with your existing `DEV_INSIGHTS_CONFIG`).
 
+Requires Python 3.10+ and Django 4.2+ (tested up to Django 6.1).
+
 ## 1) Default (text, human-friendly)
 
 Best for interactive development. Shows colored lines and expanded detailed sections.
