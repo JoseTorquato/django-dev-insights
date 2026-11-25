@@ -4,6 +4,7 @@ from django.conf import settings
 from django.http import HttpResponse, HttpResponseForbidden
 
 from .store import get_history
+from .trace import format_origin
 
 _PANEL_TEMPLATE = os.path.join(os.path.dirname(__file__), "panel.html")
 
@@ -28,6 +29,7 @@ def panel_view(request):
         query_count = db.get("query_count", 0)
         db_time = db.get("total_db_time_ms", 0)
         dup_count = db.get("duplicate_query_count", 0)
+        similar_count = db.get("similar_query_count", 0)
         slow_count = db.get("slow_query_count", 0)
         tpl_count = tpl.get("template_count", 0)
         tpl_time = tpl.get("total_render_time_ms", 0)
@@ -49,6 +51,16 @@ def panel_view(request):
                 cnt = d.get("count", 0)
                 dup_details += f'<div class="detail dup">({cnt}x) {sql}</div>'
 
+        # Similar (N+1 suspects) details
+        similar_details = ""
+        for s in db.get("similar_sqls", []):
+            if isinstance(s, dict):
+                sig = _escape(s.get("signature", ""))
+                cnt = s.get("count", 0)
+                origin = format_origin(s.get("origin"))
+                at = f" <em>at {_escape(origin)}</em>" if origin else ""
+                similar_details += f'<div class="detail sim">({cnt}x) {sig}{at}</div>'
+
         # Slow query details
         slow_details = ""
         for s in db.get("slow_queries", []):
@@ -65,7 +77,7 @@ def panel_view(request):
                 t_ms = t.get("time_ms", 0)
                 tpl_details += f'<div class="detail tpl">[{t_ms}ms] {name}</div>'
 
-        details = dup_details + slow_details + tpl_details
+        details = dup_details + similar_details + slow_details + tpl_details
         has_details = " has-details" if details else ""
 
         rows_html += f"""<tr class="{severity}{has_details}">
@@ -74,6 +86,7 @@ def panel_view(request):
 <td>{query_count}</td>
 <td>{db_time}ms</td>
 <td>{dup_count}</td>
+<td>{similar_count}</td>
 <td>{slow_count}</td>
 <td>{tpl_count}</td>
 <td>{tpl_time}ms</td>
@@ -81,7 +94,7 @@ def panel_view(request):
 </tr>"""
         if details:
             rows_html += f"""<tr class="details-row {severity}">
-<td colspan="9">{details}</td></tr>"""
+<td colspan="10">{details}</td></tr>"""
 
     with open(_PANEL_TEMPLATE, "r", encoding="utf-8") as f:
         html = f.read()

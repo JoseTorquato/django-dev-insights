@@ -11,6 +11,18 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions fol
 - Python 3.8/3.9 and Django 3.2–4.1 are no longer declared. In practice Python 3.8 was already broken: since 0.3.0 the PEP 639 `license = "MIT"` field needs setuptools 77 or newer, which does not run on Python 3.8, so the package could not be built from source there.
 - CI tests every declared Django version at least once, including the extremes (Python 3.10 + Django 4.2, Python 3.13 + Django 6.1), and installs the package from source in every job.
 
+### Added
+- **Similar queries** (`similar_query_count`, `similar_sqls`): queries grouped by a normalized SQL signature (literals and parameters replaced by `?`, `IN (...)` collapsed). Catches the classic N+1, where each query differs only in its parameters; 0.3.0 compared the exact SQL text and reported zero duplicates for it. Shown in the text output, JSON and HTML panel, next to duplicates.
+- `dev_insights.signature.sql_signature()`.
+- `dev_insights.recorder.QueryRecorder`: records queries through `connection.execute_wrapper`, so it works with `DEBUG = False` (test runners). Captures the origin (file, line, function) of the first query of each signature when it runs.
+
+### Fixed
+- Tracebacks of duplicate, slow and connection-setup queries were captured at the end of the request, so they showed the middleware's stack. They now come from the moment the query ran (`ENABLE_TRACEBACKS`), and frames from Django, this library and installed packages are skipped.
+
+### Unchanged
+- `duplicate_query_count` / `duplicate_sqls` keep their meaning: same SQL, same parameters.
+- The middleware still only runs with `DEBUG = True`.
+
 ## [0.3.0] - 2026-03-28
 
 ### Added

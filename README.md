@@ -21,7 +21,7 @@ In real-world Django apps a single view can inadvertently issue dozens or hundre
 ## Features
 
 - **Per-request metrics**: total time, DB time, query count.
-- **Duplicate SQL detection** with optional stack traces — finds N+1 patterns instantly.
+- **Duplicate and similar SQL detection** — exact duplicates (same SQL, same parameters) and *similar* queries (same normalized SQL, different parameters: the classic N+1), with the file and line that ran them when tracebacks are on.
 - **Slow query detection** (configurable threshold) with optional stack traces.
 - **Connection collector**: detects setup queries (`SET search_path`, `SELECT VERSION`) and connection reopens.
 - **Template collector**: measures render time of each Django template per request.
@@ -89,17 +89,22 @@ The panel shows a table of recent requests with:
 Colored, human-readable lines with expandable detail sections:
 
 ```
-[DevInsights] Path: /users/45 | Total: 4821.37ms | DB Queries: 36 | DB Time: 4120.5ms | !! DUPLICATES: 12 !!
+[DevInsights] Path: /users/45 | Total: 4821.37ms | DB Queries: 36 | DB Time: 4120.5ms | !! DUPLICATES: 12 !! | !! SIMILAR (N+1?): 30 !!
     [Duplicated SQLs]:
       -> (4x) SELECT "users"."id", ...
          Traceback:
          app/views.py:123 in user_detail -> User.objects.filter(...)
+    [Similar SQLs (same query, different params)]:
+      -> (26x) SELECT "orders"."id", ... WHERE "orders"."user_id" = ?
+         at app/views.py:131 in user_detail
     [Slow Queries (> 100ms)]:
       -> [732.1ms] SELECT "reports"."id", ...
     [Templates]: 3 rendered in 45.2ms
       -> [30.1ms] templates/base.html
       -> [12.0ms] templates/users/detail.html
 ```
+
+In the middleware, the `Traceback:` and `at file:line` lines only appear with `ENABLE_TRACEBACKS = True` (default `False`). With the default, you still get the counts and the SQL, without the origin. `QueryRecorder` and the CI guard always capture the origin.
 
 ### JSON output
 
@@ -112,7 +117,10 @@ Structured payload per request — useful for logs, CI, or tooling:
   "db_metrics": {
     "query_count": 12,
     "total_db_time_ms": 266.0,
+    "duplicate_query_count": 0,
     "duplicate_sqls": [],
+    "similar_query_count": 0,
+    "similar_sqls": [],
     "slow_queries": []
   },
   "connection_metrics": {
@@ -179,7 +187,7 @@ DEV_INSIGHTS_CONFIG = {
 
 | Collector | Config key | What it does |
 |-----------|-----------|--------------|
-| **DBCollector** | `'db'` | Query count, DB time, duplicate detection (N+1), slow query detection. Optional stack traces. |
+| **DBCollector** | `'db'` | Query count, DB time, exact duplicates, similar queries (N+1), slow query detection. Optional stack traces, captured when each query runs. |
 | **ConnectionCollector** | `'connection'` | Detects setup queries (`SET search_path`, `SELECT VERSION`, `SHOW`) and connection reopens. |
 | **TemplateCollector** | `'template'` | Measures render time of each Django template. Opt-in — add `'template'` to `ENABLED_COLLECTORS`. |
 
@@ -249,9 +257,40 @@ Enable `ENABLE_TRACEBACKS` temporarily to locate the code path causing repeated 
 
 ---
 
+## Duplicates vs. similar queries
+
+- **Duplicates** (`duplicate_query_count`): the very same SQL, parameters included, ran more than once. Same meaning as in 0.3.
+- **Similar** (`similar_query_count`): queries with the same *signature* — literals and parameters replaced by `?`, `IN (...)` lists of any size collapsed — ran more than once. This is what catches the classic N+1 (`for book in books: book.author`), where each query differs only in the id. Every duplicate is also similar.
+
+The signature is built from the SQL text, not from the ORM, so it also groups `raw()` queries and SQL issued by third-party code.
+
+### Where the origin points
+
+The origin is the innermost frame of *your* code when the query ran. Frames from Django, from this library and from anything under `site-packages` / `dist-packages` are skipped. That has two consequences:
+
+- **N+1 triggered from a template** (`{{ book.author.name }}` in a loop): the query runs while Django renders, so the origin is the line in your view that calls `render(...)`, not the line in the `.html` file.
+- **Your own code installed as a regular package** (in `site-packages`) is skipped like any other dependency: the origin falls back to the first frame outside it, which is usually the view that called it. If nothing of yours is on the stack, there is no origin. Editable installs (`pip install -e`) live outside `site-packages` and are reported normally.
+
+## Recording queries without DEBUG
+
+```python
+from dev_insights.recorder import QueryRecorder
+
+with QueryRecorder() as rec:
+    client.get("/books/")
+
+metrics = rec.metrics()
+metrics["similar_query_count"]       # e.g. 10
+metrics["similar_sqls"][0]["origin"] # {"file": "shop/views.py", "line": 12, "func": "book_list"}
+```
+
+`QueryRecorder` uses `connection.execute_wrapper`, so it works with `DEBUG = False` (Django's test runner and pytest-django force it). It records queries from the current thread, on every database alias. The origin — the innermost frame of your code, skipping Django, this library and installed packages — is captured when the query runs, once per signature.
+
+---
+
 ## Tips
 
-- Only runs when `DEBUG = True` — the middleware depends on `connection.queries`.
+- The middleware only runs when `DEBUG = True` — it depends on `connection.queries`. To measure without `DEBUG` (in tests, for example), use `QueryRecorder` (below).
 - Keep `ENABLE_TRACEBACKS` disabled by default — enable only when actively debugging.
 - Use `EXCLUDE_PATHS` to filter static files and health checks from the output.
 - The HTML panel stores metrics in memory only — data is cleared on server restart.

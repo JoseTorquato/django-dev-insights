@@ -1,8 +1,5 @@
 from django.db import connections
 
-from dev_insights.config import ENABLE_TRACEBACKS, TRACEBACK_DEPTH
-from dev_insights.trace import capture_traceback, format_traceback
-
 SETUP_PREFIXES = (
     "set ",
     "select version",
@@ -53,9 +50,10 @@ class ConnectionCollector:
                 # treated as setup queries.
                 if low.startswith(SETUP_PREFIXES) or "set search_path" in low:
                     item = {"sql": sql}
-                    if ENABLE_TRACEBACKS:
-                        frames = capture_traceback(depth=TRACEBACK_DEPTH)
-                        item["traceback"] = format_traceback(frames)
+                    # captured at execution by sql_trace (ENABLE_TRACEBACKS),
+                    # not here, where the stack is the middleware's
+                    if q.get("traceback"):
+                        item["traceback"] = q["traceback"]
                     alias_setup.append(item)
 
             setup_queries[alias] = alias_setup

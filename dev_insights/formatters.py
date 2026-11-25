@@ -9,6 +9,8 @@ from .config import (
 )
 import json
 
+from .trace import format_origin
+
 init(autoreset=True)
 
 
@@ -48,6 +50,11 @@ def _format_json(metrics):
         db_metrics["duplicate_sqls"] = truncated
         if omitted:
             db_metrics["duplicate_sqls_omitted"] = omitted
+    if "similar_sqls" in db_metrics:
+        truncated, omitted = _truncate_list(db_metrics.get("similar_sqls"))
+        db_metrics["similar_sqls"] = truncated
+        if omitted:
+            db_metrics["similar_sqls_omitted"] = omitted
     if "slow_queries" in db_metrics:
         truncated, omitted = _truncate_list(db_metrics.get("slow_queries"))
         db_metrics["slow_queries"] = truncated
@@ -124,6 +131,14 @@ def _format_text(metrics):
                 f"{Style.RESET_ALL}{line_color}"
             )
 
+        similar_count = db_metrics.get("similar_query_count", 0)
+        if similar_count > 0:
+            sim_color = get_color_for_metric("duplicate_query_count", similar_count)
+            parts.append(
+                f"{sim_color}!! SIMILAR (N+1?): {similar_count} !!"
+                f"{Style.RESET_ALL}{line_color}"
+            )
+
     lines = [" | ".join(parts)]
 
     # Duplicate details
@@ -141,6 +156,23 @@ def _format_text(metrics):
                     )
             else:
                 lines.append(f"{Fore.YELLOW}      -> {item}{Style.RESET_ALL}")
+
+    # Similar queries: same signature, different parameters (N+1 suspects)
+    if db_metrics.get("similar_query_count", 0) > 0:
+        lines.append(
+            f"{Fore.YELLOW}    [Similar SQLs (same query, different params)]:"
+            f"{Style.RESET_ALL}"
+        )
+        for item in db_metrics.get("similar_sqls", []):
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"{Fore.YELLOW}      -> ({item.get('count')}x) "
+                f"{item.get('signature')}{Style.RESET_ALL}"
+            )
+            origin = format_origin(item.get("origin"))
+            if origin:
+                lines.append(f"{Fore.YELLOW}         at {origin}{Style.RESET_ALL}")
 
     # Slow queries
     if db_metrics.get("slow_query_count", 0) > 0:
