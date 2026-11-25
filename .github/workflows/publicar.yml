@@ -1,0 +1,100 @@
+name: publish to PyPI
+
+# Trusted Publishing: PyPI trusts this repository and this workflow, and GitHub
+# issues a short-lived token at run time. No secret is stored anywhere: nothing
+# to leak, expire or rotate when someone leaves the project.
+#
+# The trigger is publishing a GitHub release, not a push. Publishing a version
+# is a deliberate, audited act: it records who pressed the button and when.
+#
+# One-time setup on PyPI (project django-dev-insights > Publishing > GitHub
+# Actions): owner JoseTorquato · repository django-dev-insights ·
+# workflow publicar.yml · environment pypi.
+# The four must match exactly, or PyPI rejects the token.
+# Docs: https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  # A published version cannot be deleted and uploaded again. Everything that
+  # can fail has to fail here, before the upload.
+  conferir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # [test] brings pytest-django and pytest-xdist, so the guard's
+      # integration tests run instead of being skipped
+      - run: pip install -e ".[test]" build twine
+
+      - name: does the test suite pass?
+        run: python -m pytest -q
+
+      - name: does the package version match the release tag?
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF_NAME" in
+            v[0-9]*) ;;
+            *) echo "::error::the release tag ($GITHUB_REF_NAME) must look like vX.Y.Z"; exit 1 ;;
+          esac
+          tag="${GITHUB_REF_NAME#v}"
+          package=$(python -c "from importlib.metadata import version; print(version('django-dev-insights'))")
+          echo "tag=$tag package=$package"
+          if [ "$tag" != "$package" ]; then
+            echo "::error::the release tag ($tag) does not match the version in pyproject.toml ($package)."
+            echo "::error::publishing would ship a package with the wrong number, and that cannot be undone."
+            exit 1
+          fi
+          # a release without its CHANGELOG section ships notes nobody wrote
+          if ! grep -q "^## \[$tag\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$tag]' section."
+            exit 1
+          fi
+
+      - name: build
+        run: |
+          rm -rf dist
+          python -m build
+          python -m twine check dist/*
+
+      - name: does the wheel work on its own, with its pytest plugin?
+        # A clean virtualenv outside the repository, with only the wheel (and
+        # pytest, which the wheel does not require): the import must come from
+        # the wheel, the pytest11 entry point must be registered, and a minimal
+        # Django project must run the guard through it. A wheel that lost its
+        # entry point would install fine and silently never guard anything.
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install --quiet dist/*.whl pytest
+          cd /tmp
+          /tmp/clean/bin/python -I "$GITHUB_WORKSPACE/scripts/check_package.py" \
+            --expected-version "${GITHUB_REF_NAME#v}" \
+            --source-tree "$GITHUB_WORKSPACE"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publicar:
+    needs: conferir
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # this is what lets GitHub issue the short-lived token for PyPI
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
