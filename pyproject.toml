@@ -36,6 +36,11 @@ dependencies = [
     "colorama>=0.4.0",
 ]
 
+[project.optional-dependencies]
+# what the test suite needs, including the guard's pytest-django and
+# pytest-xdist integration tests (used by CI and the release workflow)
+test = ["pytest", "pytest-cov", "pytest-django", "pytest-xdist"]
+
 [project.entry-points.pytest11]
 # inert until a test uses the dev_insights marker or fixture
 dev_insights = "dev_insights.pytest_plugin"
