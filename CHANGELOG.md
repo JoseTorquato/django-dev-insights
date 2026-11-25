@@ -8,7 +8,9 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions fol
 
 ### Upgrading from 0.3
 
-- **Requirements:** Python 3.10+ and Django 4.2+. On older versions, pip keeps you on 0.3.0.
+- **Requirements:** Python 3.10+ and Django 4.2+.
+  - On **Python < 3.10**, pip stays on 0.3.0 by itself.
+  - On **Django < 4.2**, it does not: if Django is not pinned, `pip install -U django-dev-insights` installs 0.4.0 **and upgrades Django** to satisfy it. Before upgrading, pin Django in your requirements (e.g. `Django==3.2.*`), or pin `django-dev-insights<0.4`.
 - **`duplicate_query_count` / `duplicate_sqls` did not change meaning:** same SQL, same parameters. Your existing thresholds keep working.
 - **`similar_query_count` / `similar_sqls` are new:** queries that differ only in their parameters, i.e. the classic N+1, which 0.3 reported as zero duplicates. Expect this number to be non-zero on views that were "clean" before. Nothing fails because of it in development; it is only shown in the log, JSON and panel.
 - **Origins in the middleware need `ENABLE_TRACEBACKS = True`** (default `False`), as before. What changed is that the traceback now points to the line that ran the query, not to the middleware. `QueryRecorder` and the CI guard always capture the origin.

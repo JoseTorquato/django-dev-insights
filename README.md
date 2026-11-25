@@ -39,7 +39,7 @@ In real-world Django apps a single view can inadvertently issue dozens or hundre
 pip install django-dev-insights
 ```
 
-The CI guard (pytest plugin) and the similar-query count need **0.4.0 or newer**. Upgrading from 0.3? See the "Upgrading from 0.3" notes in [CHANGELOG.md](CHANGELOG.md).
+The CI guard (pytest plugin) and the similar-query count need **0.4.0 or newer**. Upgrading from 0.3? See the "Upgrading from 0.3" notes in [CHANGELOG.md](CHANGELOG.md). On Django older than 4.2, pin Django (or `django-dev-insights<0.4`) first: otherwise pip upgrades Django to install 0.4.
 
 **Compatibility:** Python 3.10–3.13 and Django 4.2, 5.0, 5.1, 5.2, 6.0 and 6.1 — every one of these Django versions and Python versions is exercised in CI.
 
